@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import javax.servlet.http.HttpServletRequest;
@@ -56,6 +57,7 @@ public class AdminController {
         if(adminService.login(username, password)){
             sessionList.merge(username, session.getId(), (key, value) -> value = session.getId());
             session.setAttribute("username", username);
+            System.out.println("SUCCESS");
             return new ResponseEntity(HttpStatus.OK);
         }
         else{
@@ -94,7 +96,7 @@ public class AdminController {
                 items = json.getJSONArray("items");
 
                 long activityId = adminService.postActivity(activityName,
-                        session.getAttribute("username").toString(), startTime, endTime, items);
+                        session.getAttribute("username").toString(), startTime, endTime, items,"");
                 if(activityId != -1){
                     JSONObject response = new JSONObject();
                     response.put("id", activityId);
@@ -218,8 +220,60 @@ public class AdminController {
     @ResponseBody
     @RequestMapping(value = "/admin/submitCSP", method = RequestMethod.POST,
             produces = "application/json;charset=UTF-8")
-    public ResponseEntity<String> addScore(MultipartHttpServletRequest request){
-        return new ResponseEntity<>(adminService.doinsertCSPInfo(request), HttpStatus.OK);
+    public ResponseEntity<String> addScore(MultipartHttpServletRequest request ,HttpSession session){
+        if(checkUser(session)) {
+            return new ResponseEntity<>(adminService.doinsertCSPInfo(request), HttpStatus.OK);
+        }else{
+            return new ResponseEntity<>("", HttpStatus.UNAUTHORIZED);
+        }
     }
 
+    //    通过Doc表明表去生成表单
+    @ResponseBody
+    @RequestMapping(value = "/admin/activitybyfile", method = RequestMethod.POST,
+            produces = "application/json;charset=UTF-8")
+    public ResponseEntity<String> postActivityByFile(MultipartHttpServletRequest request, HttpSession session){
+        if(checkUser(session)){
+            String activityName;
+            Timestamp startTime;
+            Timestamp endTime;
+            try{
+                activityName = request.getParameter("name");
+                startTime =  Timestamp.valueOf(request.getParameter("startTime"));
+                endTime =  Timestamp.valueOf(request.getParameter("endTime"));
+                MultipartFile file = request.getFile("file");
+                String fileName = adminService.randomName()+"."+file.getOriginalFilename().substring(
+                        file.getOriginalFilename().lastIndexOf(".") + 1);;
+                JSONArray items = adminService.getTableFromFile(file,fileName);
+                long activityId = adminService.postActivity(activityName,
+                        session.getAttribute("username").toString(), startTime, endTime, items,fileName);
+                if(activityId == -1){
+                    return new ResponseEntity<>("", HttpStatus.NOT_ACCEPTABLE);
+                }
+                else{
+                    JSONObject res = new JSONObject();
+                    res.put("id", activityId);
+                    return new ResponseEntity<>(res.toString(), HttpStatus.OK);
+                }
+            } catch (Exception e){
+                e.printStackTrace();
+                return new ResponseEntity<>("", HttpStatus.NOT_ACCEPTABLE);
+            }
+        }
+        else{
+            return new ResponseEntity<>("", HttpStatus.UNAUTHORIZED);
+        }
+    }
+
+//    批量下载
+@ResponseBody
+@RequestMapping(value = "/admin/activity/download/{id}", method = RequestMethod.GET,
+        produces = "application/json;charset=UTF-8")
+public ResponseEntity<String> downloadAllData(@PathVariable long id, HttpSession session){
+    if(checkUser(session) ){
+        System.out.println("Download！"+id);
+        return new ResponseEntity<>(adminService.generateZipFile(id), HttpStatus.OK);
+    }
+    else return new ResponseEntity<>("", HttpStatus.UNAUTHORIZED);
+}
 }

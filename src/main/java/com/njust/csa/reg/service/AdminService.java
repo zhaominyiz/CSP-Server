@@ -3,6 +3,7 @@ package com.njust.csa.reg.service;
 import com.njust.csa.reg.repository.docker.*;
 import com.njust.csa.reg.repository.entities.*;
 import com.njust.csa.reg.util.ActivityUtil;
+import com.njust.csa.reg.util.DocxUtil;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.*;
@@ -22,6 +23,10 @@ import java.io.InputStream;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 public class AdminService {
@@ -47,11 +52,13 @@ public class AdminService {
     }
 
     public boolean login(String username, String password) {
+//        System.out.println("!!!"+password+ DigestUtils.md5Hex("NJUST" + password + "CSA"));
         return userRepo.existsByNameAndPassword(username, DigestUtils.md5Hex("NJUST" + password + "CSA"));
     }
 
     @Transactional
-    public long postActivity(String activityName, String publisherName, Timestamp startTime, Timestamp endTime, JSONArray items) {
+    public long postActivity(String activityName, String publisherName, Timestamp startTime, Timestamp endTime,
+                             JSONArray items,String templename) {
         long activityId;
         TableInfoEntity tableInfo = new TableInfoEntity();
         tableInfo.setTitle(activityName);
@@ -61,6 +68,7 @@ public class AdminService {
         tableInfo.setStartTime(startTime);
         tableInfo.setEndTime(endTime);
         tableInfo.setStatus((byte) 0);
+        tableInfo.setTempleName(templename);
 //        if(startTime == null || startTime.before(new Timestamp(System.currentTimeMillis()))){
 //            tableInfo.setStatus("open");
 //        }
@@ -315,14 +323,20 @@ public class AdminService {
         return result;
     }
 
+//    此函数用于插入CSP成绩
     public String doinsertCSPInfo (MultipartHttpServletRequest request){
+        JSONObject responseJson = new JSONObject();
         MultipartFile table =request.getFile("file");
-        String filePath = "src/main/resources/static/tmp/";
+        String filePath = "/../CSP/tmp/";
+        File path =new File(filePath);
+        if(!path.exists()) {
+            path.mkdirs();
+//            System.out.println("EGG! CAO!");
+        }
         String fileName = table.getOriginalFilename();
         String suffix =fileName.substring(fileName.lastIndexOf(".") + 1);
         long id = Long.parseLong(request.getParameter("id"));
         fileName="tmp."+suffix;
-        System.out.println(filePath+fileName);
         try {
             FileOutputStream out = new FileOutputStream(filePath + fileName);
             out.write(table.getBytes());
@@ -330,25 +344,37 @@ public class AdminService {
             out.close();
             List<List<String>>lists=new ArrayList<>();
             if(readExcel(filePath+fileName,lists)){
+//                防止将第一行写入数据库
+                int cnt=0;
                 for(List<String>list:lists){
+                    if(cnt==0){
+                        cnt++;
+                        continue;
+                    }
                     ScoreEntity score=new ScoreEntity();
                     score.setActid(id);
-                    score.setScore(list.get(1));
+                    score.setScore(list.get(2));
+                    score.setName(list.get(1));
                     score.setStuid(list.get(0));
+
                     List<ScoreEntity> queryresult= scoreRepo.findAllByActidAndStuid(id,score.getStuid());
                     if(queryresult==null || queryresult.size()==0)
                         scoreRepo.save(score);
                     else{
                         score=queryresult.get(0);
-                        score.setScore(list.get(1));
+                        score.setScore(list.get(2));
+                        score.setName(list.get(1));
                         scoreRepo.save(score);
                     }
                 }
             }
+            responseJson.put("reason", "");
+            return responseJson.toString();
         }catch (Exception ex){
             ex.printStackTrace();
+            responseJson.put("reason", "不支持的文件格式，请使用xls");
+            return  responseJson.toString();
         }
-        return "";
     }
 
     private boolean readExcel(String s,List<List<String>> lists) throws Exception{
@@ -356,16 +382,11 @@ public class AdminService {
         String currentpath=new File("").getAbsolutePath()+"\\";
         InputStream stream = new FileInputStream(currentpath+s);
         String fileType =s.substring(s.lastIndexOf(".") + 1);
-//        System.out.println(currentpath+s);
         if (fileType.equals("xls")) {
             wb = new HSSFWorkbook(stream);
         }
-        else if (fileType.equals("xlsx")) {
-
-            return false;
-        }
         else {
-            System.out.println("您输入的excel格式不正确");
+            throw new Exception("Unsupported file");
         }
         Sheet sheet1 = wb.getSheetAt(0);
         for (Row row : sheet1) {
@@ -373,11 +394,105 @@ public class AdminService {
             for (Cell cell : row) {
                 cell.setCellType(CellType.STRING);
                 tmplist.add(cell.getStringCellValue());
-//                System.out.print(cell.getStringCellValue()+"  ");
             }
             lists.add((tmplist));
-//            System.out.println();
         }
         return true;
+    }
+
+//    解析doc文件的占位符，生成报名表信息
+    public JSONArray getTableFromFile(MultipartFile file,String randName){
+        JSONArray ans = new JSONArray();
+        String filePath = "CSP/temple/";
+        File path = new File(filePath);
+        if(!path.exists())path.mkdirs();
+        String fileName = file.getOriginalFilename();
+        String suffix =fileName.substring(fileName.lastIndexOf(".") + 1);
+        fileName=randName;
+        try {
+            FileOutputStream out = new FileOutputStream(filePath + fileName);
+            out.write(file.getBytes());
+            out.flush();
+            out.close();
+            String result = new DocxUtil().ReadDocx(filePath+fileName);
+            Pattern p = Pattern.compile("\\$\\{(.+?)\\}");
+//            Pattern p2 = Pattern.compile("<(.+?)>");
+            Matcher m = p.matcher(result);
+            List<String> matchresult = new ArrayList<>();
+            while(m.find()){
+                matchresult.add(m.group().substring(2,m.group().length()-1));
+            }
+            for(String str:matchresult){
+                String tmp ="";
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.put("name",str);
+                jsonObject.put("extension",str);
+                jsonObject.put("type","text");
+                jsonObject.put("unique",false);
+                jsonObject.put("require",false);
+                jsonObject.put("description",tmp);
+                jsonObject.put("tip",str);
+                ans.put(jsonObject);
+            }
+        }catch (Exception ex){
+            ex.printStackTrace();
+        }
+        return ans;
+    }
+
+    public String randomName() {
+        String table = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        int l=20;
+        String ans="";
+        while(l-->0){
+            ans+=table.charAt((int)(Math.random() * table.length()));
+        }
+        return ans;
+    }
+
+    public String generateZipFile(long id){
+        JSONObject object = new JSONObject();
+        try {
+            TableInfoEntity table = tableInfoRepo.getTableInfoEntityById(id);
+            if(table.getTempleName().equals("")){
+                object.put("reason","没有模板文件");
+                return object.toString();
+            }
+            String pp = "CSP/data/";
+            File tmppp = new File(pp);
+            if(!tmppp.exists())tmppp.mkdirs();
+            String path = "CSP/data/"+String.valueOf(id)+"/";
+            File dic = new File(path);
+            if(!dic.exists()){
+                System.out.println("目录异常");
+                object.put("reason","目录异常");
+                return object.toString();
+            }
+            String strZipName = path+"ALLDATA.zip";
+            File zipfile =new File(strZipName);
+            if(zipfile.exists())
+                zipfile.delete();
+            File files[]=dic.listFiles();
+            FileInputStream nFileInputStream = null;
+            ZipOutputStream nZipOutputStream = null;
+//            System.out.println("GO!");
+            nZipOutputStream = new ZipOutputStream(new FileOutputStream(strZipName));
+            for (File file : files) {
+                nFileInputStream = new FileInputStream(file);
+                nZipOutputStream.putNextEntry(new ZipEntry(file.getName()));
+                int len;
+                while ((len = nFileInputStream.read()) != -1) {
+                    nZipOutputStream.write(len);
+                    nZipOutputStream.flush();
+                }
+            }
+            nZipOutputStream.close();
+            nFileInputStream.close();
+            object.put("url","http://47.100.16.60:8080/"+String.valueOf(id)+"/ALLDATA.zip");
+            object.put("reason","");
+        } catch (Exception ex){
+            ex.printStackTrace();
+        }
+        return object.toString();
     }
 }

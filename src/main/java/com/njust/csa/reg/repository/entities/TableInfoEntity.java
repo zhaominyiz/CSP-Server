@@ -20,7 +20,7 @@ public class TableInfoEntity {
     private Timestamp startTime;
     private Timestamp endTime;
     private byte status;
-
+    private  String templeName;
     @Id
     @Column(name = "id", nullable = false)
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -122,5 +122,15 @@ public class TableInfoEntity {
 
     public void setStatus(byte status) {
         this.status = status;
+    }
+
+    @Basic
+    @Column(name = "templeName", nullable = false, length = 50)
+    public String getTempleName() {
+        return templeName;
+    }
+
+    public void setTempleName(String templeName) {
+        this.templeName = templeName;
     }
 }

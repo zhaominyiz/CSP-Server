@@ -5,4 +5,6 @@ import org.springframework.data.repository.CrudRepository;
 
 public interface TableInfoRepo extends CrudRepository<TableInfoEntity, Long> {
     Iterable<TableInfoEntity> findAllByStatus(byte status);
+
+    TableInfoEntity getTableInfoEntityById(long id);
 }

@@ -31,3 +31,24 @@ dependencies {
     implementation 'org.apache.poi:poi:4.1.0'
     implementation 'org.apache.poi:poi-ooxml:4.1.0'
 }
+jar {
+    manifestContentCharset 'utf-8'
+    metadataCharset 'utf-8'
+    manifest {
+        attributes 'Main-Class': 'com.njust.csa.reg.RegApplication'
+    }
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+war{
+    manifestContentCharset 'utf-8'
+    metadataCharset 'utf-8'
+    manifest {
+        attributes 'Main-Class': 'com.njust.csa.reg.RegApplication'
+    }
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}

@@ -11,7 +11,7 @@ public class ScoreEntity {
     private String score;
     private String stuid;
     private long actid;
-
+    private String name;
     @Id
     @Column(name = "id", nullable = false)
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -62,6 +62,21 @@ public class ScoreEntity {
         }
         else{
             this.stuid = stuid;
+        }
+    }
+
+    @Basic
+    @Column(name = "name", nullable = false, length = 1000, columnDefinition = "")
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        if(name == null){
+            this.name = "";
+        }
+        else{
+            this.name = name;
         }
     }
 }
