@@ -56,6 +56,41 @@ public class AdminService {
         return userRepo.existsByNameAndPassword(username, DigestUtils.md5Hex("NJUST" + password + "CSA"));
     }
 
+    //获取以往的报名信息和成绩
+    @Transactional
+    public String getScore(String studentId){
+        JSONObject responseJson = new JSONObject();
+        List<ScoreEntity> scoreList = scoreRepo.findByStuid(studentId);
+        try{
+            int maxnScore = 0;
+            List<JSONObject> result = new ArrayList<>();
+            for(ScoreEntity scoreEntity : scoreList){
+                JSONObject resultTmpJSON = new JSONObject();
+                long actid = scoreEntity.getActid();
+                TableInfoEntity tableInfoEntity = tableInfoRepo.getTableInfoEntityById(actid);
+                String title = tableInfoEntity.getTitle();
+                String score = scoreEntity.getScore();
+                int scoreTmp = Integer.parseInt(score);
+                if(scoreTmp>maxnScore){
+                    maxnScore = scoreTmp;
+                }
+                resultTmpJSON.put("score",score);
+                resultTmpJSON.put("title",title);
+                result.add(resultTmpJSON);
+            }
+            responseJson.put("result",result);
+            responseJson.put("maxnscore",maxnScore);
+            responseJson.put("success",true);
+            return responseJson.toString();
+        }catch(Exception ex){
+            ex.printStackTrace();
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.put("success",false);
+            jsonObject.put("reason","获取失败！");
+            return jsonObject.toString();
+        }
+    }
+
     @Transactional
     public long postActivity(String activityName, String publisherName, Timestamp startTime, Timestamp endTime,
                              JSONArray items,String templename) {

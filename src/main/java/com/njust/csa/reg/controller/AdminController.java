@@ -28,6 +28,14 @@ public class AdminController {
         this.adminService = adminService;
     }
 
+    //获取以往报名情况和成绩
+    @RequestMapping(value = "/student/score", method = RequestMethod.GET, produces = "application/json;charset=UTF-8")
+    @ResponseBody
+    public String getWeekMessage(HttpServletRequest request) {
+        String studentid = request.getParameter("studentid");
+        return adminService.getScore(studentid);
+    }
+
     //重定向后的请求处理
     @RequestMapping(value = "/page/login", method = RequestMethod.GET)
     public String getIndex(HttpServletRequest request){
