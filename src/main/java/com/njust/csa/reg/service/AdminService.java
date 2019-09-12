@@ -318,7 +318,9 @@ public class AdminService {
 
             if (!item.isNull("range")) {
                 JSONArray range = item.getJSONArray("range");
-                structureEntity.setRanges(range.get(0) + "," + range.get(1));
+//                System.out.println(range.length());
+                if(range.length()==2)
+                    structureEntity.setRanges(range.get(0) + "," + range.get(1));
             }
 
             if (belongsTo != -1) {
@@ -489,6 +491,7 @@ public class AdminService {
         JSONObject object = new JSONObject();
         try {
             TableInfoEntity table = tableInfoRepo.getTableInfoEntityById(id);
+            String excel = generateExcel(table);
             if(table.getTempleName().equals("")){
                 object.put("reason","没有模板文件");
                 return object.toString();
@@ -524,10 +527,61 @@ public class AdminService {
             nZipOutputStream.close();
             nFileInputStream.close();
             object.put("url","http://47.100.16.60:8080/"+String.valueOf(id)+"/ALLDATA.zip");
+            object.put("excel","http://47.100.16.60:8080/"+excel);
             object.put("reason","");
         } catch (Exception ex){
             ex.printStackTrace();
         }
         return object.toString();
+    }
+
+    private String generateExcel(TableInfoEntity table) {
+        String title = table.getTitle();
+        List<List<String>> ans= new ArrayList<>();
+        List <TableStructureEntity> structs = tableStructureRepo.findAllByTableId(table.getId());
+        List<String> titlename = new ArrayList<>();
+        for(TableStructureEntity struct : structs){
+            titlename.add(struct.getTitle());
+        }
+        ans.add(titlename);
+        int cnt = applicantInfoRepo.countByBelongsToStructureId(structs.get(0).getId());
+        for(int now = 1;now<=cnt;now++){
+            List <String> strings = new ArrayList<>();
+            for(TableStructureEntity struct : structs){
+                ApplicantInfoEntity info =
+                        applicantInfoRepo.findApplicantInfoEntityByApplicantNumberAndBelongsToStructureId(now,struct.getId());
+                strings.add(info.getValue());
+            }
+            ans.add(strings);
+        }
+        Workbook workbook2003 = new HSSFWorkbook();
+        Sheet sheet = workbook2003.createSheet(title);
+        cnt=0;
+        for(List<String>strs: ans) {
+            Row row = sheet.createRow(cnt++);
+            //设置行高
+//            row.setHeightInPoints(30);
+            int cnt2= 0;
+            for(String str:strs) {
+//                System.out.print(str);
+                Cell cell = row.createCell(cnt2++);
+                cell.setCellValue(str);
+            }
+//            System.out.println();
+        }
+        try {
+            String path = "CSP/data/"+String.valueOf(table.getId())+"/";
+            File dir = new File(path);
+            if(!dir.exists())dir.mkdirs();
+            String target = path+title+".xls";
+            FileOutputStream fos = new FileOutputStream(new File(target));
+            workbook2003.write(fos);
+
+            fos.close();
+            return String.valueOf(table.getId())+"/"+title+".xls";
+        }catch (Exception ex){
+            ex.printStackTrace();
+            return "";
+        }
     }
 }
